@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2F6B4F">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>Gastos Casa</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- LOGIN -->
+<section id="login" class="login hidden">
+  <div class="logo"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></div>
+  <h1>Gastos Casa</h1>
+  <p>Ingresá tu PIN</p>
+  <div class="dots" id="dots"><i></i><i></i><i></i><i></i></div>
+  <div class="pad" id="pad"></div>
+  <div class="msg" id="loginMsg"></div>
+</section>
+
+<!-- APP -->
+<div id="app" class="hidden">
+  <header class="top">
+    <h1>Gastos Casa</h1>
+    <span id="pendingBadge" class="pending hidden"></span>
+    <button class="who" id="whoBtn" title="Cerrar sesión"><span class="avatar" id="avatar">?</span><span id="whoName"></span></button>
+  </header>
+
+  <main>
+    <!-- CARGAR -->
+    <section class="view on" id="v-cargar">
+      <div class="card capture">
+        <button class="mic" id="micBtn" aria-label="Dictar gasto">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4M8 21h8"/></svg>
+        </button>
+        <p class="hint" id="micHint">Tocá y decí, por ejemplo:<br><em>“verdulería 8 mil efectivo”</em> · <em>“zapatillas 90 mil en 3 cuotas con la Visa”</em></p>
+        <div class="live" id="live"></div>
+        <form class="textline" id="textForm">
+          <input id="textIn" placeholder="…o escribilo: súper 15 mil débito" autocomplete="off" enterkeyhint="send">
+          <button class="btn" type="submit">OK</button>
+        </form>
+        <button class="linkbtn" id="manualBtn" type="button">+ Carga manual</button>
+      </div>
+      <div class="card">
+        <h3>Últimos cargados</h3>
+        <div id="recent"><div class="loading">Cargando…</div></div>
+      </div>
+    </section>
+
+    <!-- MOVIMIENTOS -->
+    <section class="view" id="v-movs">
+      <div class="monthnav"><button data-m="-1">‹</button><strong id="movMes"></strong><button data-m="1">›</button></div>
+      <div class="filters" id="movFilters"></div>
+      <input class="search" id="movSearch" placeholder="Buscar descripción, rubro…" type="search">
+      <div class="sumbar"><span id="movCount"></span><b class="num" id="movSum"></b></div>
+      <div id="movList"></div>
+    </section>
+
+    <!-- PANEL -->
+    <section class="view" id="v-panel">
+      <div class="monthnav"><button data-m="-1">‹</button><strong id="panMes"></strong><button data-m="1">›</button></div>
+      <div id="panel"><div class="loading">Cargando…</div></div>
+    </section>
+  </main>
+
+  <nav class="tabs">
+    <button class="on" data-v="cargar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Cargar</button>
+    <button data-v="movs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Movimientos</button>
+    <button data-v="panel"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Panel</button>
+  </nav>
+</div>
+
+<!-- EDITOR DE GASTO -->
+<div class="sheet-bg" id="sheetBg"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true">
+  <div class="grab"></div>
+  <h2 id="sheetTitle">Confirmar gasto</h2>
+  <p class="orig" id="origTxt"></p>
+  <form id="movForm">
+    <div class="f">
+      <label>Monto</label>
+      <div class="amount">
+        <input id="fMonto" inputmode="decimal" placeholder="0" required class="num">
+        <div class="seg" id="fMoneda"><button type="button" data-v="ARS" class="on">$</button><button type="button" data-v="USD">US$</button></div>
+      </div>
+      <div class="f hidden" id="cotBox" style="margin:8px 0 0">
+        <label>Cotización (venta)</label>
+        <input id="fCot" inputmode="decimal" class="num">
+        <div class="conv" id="convTxt"></div>
+      </div>
+    </div>
+    <div class="f"><label>Descripción</label><input id="fDesc" placeholder="Ej: Verdulería del barrio"></div>
+    <div class="two">
+      <div class="f"><label>Rubro</label><select id="fRubro"></select></div>
+      <div class="f"><label>Detalle</label><input id="fSub" list="subList" placeholder="Ej: Verdulería"><datalist id="subList"></datalist></div>
+    </div>
+    <div class="f"><label>Medio de pago</label><div class="opts" id="fMedio"></div></div>
+    <div class="f hidden" id="cuotasBox"><label>Cuotas</label><div class="opts" id="fCuotas"></div></div>
+    <div class="f"><label>Pagó</label><div class="opts u" id="fPago"></div></div>
+    <div class="f"><label>Tipo</label><div class="opts" id="fTipo"><button type="button" data-v="Compartido" class="on">Compartido (entra en la compensación)</button><button type="button" data-v="Personal">Personal</button></div></div>
+    <div class="f"><label>Fecha y hora</label><input id="fFecha" type="datetime-local" required></div>
+    <div class="actions">
+      <button type="button" class="btn ghost" id="cancelBtn">Cancelar</button>
+      <button type="submit" class="btn" id="saveBtn">Guardar</button>
+    </div>
+    <button type="button" class="btn danger block hidden" id="anularBtn" style="margin-top:10px">Anular movimiento</button>
+  </form>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="config.js"></script>
+<script src="parser.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

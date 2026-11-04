@@ -1,0 +1,17 @@
+{
+  "name": "Gastos Casa",
+  "short_name": "Gastos",
+  "description": "Gastos compartidos de la casa",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F4F1EA",
+  "theme_color": "#2F6B4F",
+  "lang": "es-AR",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
