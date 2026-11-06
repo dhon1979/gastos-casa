@@ -101,9 +101,10 @@
       <div class="f"><label>Detalle</label><input id="fSub" list="subList" placeholder="Ej: Verdulería"><datalist id="subList"></datalist></div>
     </div>
     <div class="f"><label>Medio de pago</label><div class="opts" id="fMedio"></div></div>
+    <div class="f hidden" id="tarjetaBox"><label>¿Qué tarjeta? <span class="lblhint">(define quién paga)</span></label><div class="opts" id="fTarjeta"></div></div>
     <div class="f hidden" id="cuotasBox"><label>Cuotas</label><div class="opts" id="fCuotas"></div></div>
     <div class="f"><label>Pagó</label><div class="opts u" id="fPago"></div></div>
-    <div class="f"><label>Tipo</label><div class="opts" id="fTipo"><button type="button" data-v="Compartido" class="on">Compartido (entra en la compensación)</button><button type="button" data-v="Personal">Personal</button></div></div>
+    <div class="f"><label>¿De quién es el gasto?</label><div class="opts" id="fTipo"></div></div>
     <div class="f"><label>Fecha y hora</label><input id="fFecha" type="datetime-local" required></div>
     <div class="actions">
       <button type="button" class="btn ghost" id="cancelBtn">Cancelar</button>

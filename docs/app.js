@@ -116,6 +116,18 @@
     $('#avatar').classList.toggle('u2', users[1] === S.user);
     setBadge();
   }
+  const esTarjetaMedio = md => md === 'Tarjeta de crédito' || md === 'Débito';
+  const tarjetas = () => (S.boot && S.boot.tarjetas) || [];
+  const cardsFor = md => tarjetas().filter(t => t.medio === md);
+  const cardByName = n => tarjetas().find(t => t.nombre === n);
+  /** Tarjeta por defecto para un medio: la última usada por este usuario, o la única que haya. */
+  function defaultCard(md, titular) {
+    let cs = cardsFor(md);
+    if (titular) cs = cs.filter(t => t.titular === titular);
+    const last = LS.get('lastTarjeta_' + S.user + '_' + md, null);
+    if (last && cs.some(t => t.nombre === last)) return last;
+    return cs.length === 1 ? cs[0].nombre : '';
+  }
   function subrubrosDe(rubro) {
     const rules = (S.boot && S.boot.reglas && S.boot.reglas.length) ? S.boot.reglas : P.DEFAULT_RULES;
     return Array.from(new Set(rules.filter(r => r.rubro === rubro).map(r => r.subrubro))).sort();
@@ -166,11 +178,15 @@
   $('#manualBtn').addEventListener('click', () => openSheet(null));
 
   function handleText(t, origen) {
-    const p = P.parse(t, { compiled: S.compiled });
+    const p = P.parse(t, { compiled: S.compiled, users: S.users, me: S.user, tarjetas: tarjetas() });
     const fh = new Date(); fh.setDate(fh.getDate() - (p.diasAtras || 0));
+    const medio = p.medio || LS.get('lastMedio_' + S.user, 'Débito');
+    const tarjeta = esTarjetaMedio(medio) ? (p.tarjeta || defaultCard(medio, p.titular)) : '';
+    const card = cardByName(tarjeta);
+    const pago = card && S.users.indexOf(card.titular) >= 0 ? card.titular : (S.users.indexOf(p.titular) >= 0 ? p.titular : S.user);
     openSheet({
       texto: t, origen, monto: p.monto, moneda: p.moneda, descripcion: p.descripcion, rubro: p.rubro, subrubro: p.subrubro,
-      medio: p.medio || LS.get('lastMedio_' + S.user, 'Débito'), cuotas: p.cuotas, tipo: p.tipo, pago: S.user, fechaHora: localISO(fh)
+      medio, tarjeta, cuotas: p.cuotas, tipo: p.tipo, personalDe: p.personalDe || S.user, pago, fechaHora: localISO(fh)
     }, false);
   }
 
@@ -187,10 +203,43 @@
       if (after) after();
     });
   }
-  bindOpts($('#fMedio'), 'medio', () => $('#cuotasBox').classList.toggle('hidden', ed.medio !== 'Tarjeta de crédito'));
+  bindOpts($('#fMedio'), 'medio', () => {
+    $('#cuotasBox').classList.toggle('hidden', ed.medio !== 'Tarjeta de crédito');
+    const c = cardByName(ed.tarjeta);
+    if (!c || c.medio !== ed.medio) setTarjeta(esTarjetaMedio(ed.medio) ? defaultCard(ed.medio) : '');
+    else renderTarjetas();
+  });
+  $('#fTarjeta').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    setTarjeta(b.dataset.v === ed.tarjeta ? '' : b.dataset.v);
+  });
+  function setTarjeta(nombre) {
+    const prevCard = cardByName(ed.tarjeta);
+    ed.tarjeta = nombre || '';
+    const c = cardByName(ed.tarjeta);
+    if (c && S.users.indexOf(c.titular) >= 0) ed.pago = c.titular;
+    else if (prevCard) ed.pago = S.user;
+    renderTarjetas(); renderPago();
+  }
+  function renderTarjetas() {
+    const cs = esTarjetaMedio(ed.medio) ? cardsFor(ed.medio) : [];
+    $('#tarjetaBox').classList.toggle('hidden', !cs.length);
+    $('#fTarjeta').innerHTML = cs.map(t => `<button type="button" data-v="${esc(t.nombre)}" class="${t.nombre === ed.tarjeta ? 'on' : ''}">${esc(t.nombre)}<small>titular ${esc(t.titular)}</small></button>`).join('');
+  }
+  function renderPago() { opts($('#fPago'), S.users, ed.pago, v => v === S.users[1] ? 'u2' : ''); }
+  function renderTipo() {
+    const cur = ed.tipo === 'Personal' ? 'P|' + ed.personalDe : 'Compartido';
+    const vals = [['Compartido', 'Compartido']].concat(S.users.map(u => ['P|' + u, 'Personal de ' + u]));
+    $('#fTipo').innerHTML = vals.map(([v, l]) => `<button type="button" data-v="${esc(v)}" class="${v === cur ? 'on' : ''}">${esc(l)}</button>`).join('');
+  }
+  $('#fTipo').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.v === 'Compartido') { ed.tipo = 'Compartido'; }
+    else { ed.tipo = 'Personal'; ed.personalDe = b.dataset.v.slice(2); }
+    renderTipo();
+  });
   bindOpts($('#fCuotas'), 'cuotas');
   bindOpts($('#fPago'), 'pago');
-  bindOpts($('#fTipo'), 'tipo');
   bindOpts($('#fMoneda'), 'moneda', updConv);
   $('#fMonto').addEventListener('input', updConv); $('#fCot').addEventListener('input', updConv);
   $('#fRubro').addEventListener('change', () => { fillSubs(); $('#fRubro').classList.remove('flag'); });
@@ -217,7 +266,12 @@
     const rubros = (S.boot && S.boot.rubros) || P.RUBROS;
     m = m || { monto: null, moneda: 'ARS', medio: LS.get('lastMedio_' + S.user, 'Débito'), cuotas: 1, tipo: 'Compartido', pago: S.user,
       fechaHora: localISO(new Date()), rubro: 'Varios', subrubro: '', descripcion: '', origen: 'manual', texto: '' };
+    if (!isEdit && !m.texto && esTarjetaMedio(m.medio) && !m.tarjeta) {
+      m.tarjeta = defaultCard(m.medio);
+      const c = cardByName(m.tarjeta); if (c && S.users.indexOf(c.titular) >= 0) m.pago = c.titular;
+    }
     ed = { id: m.id, moneda: m.moneda || 'ARS', medio: m.medio, cuotas: String(m.cuotas || 1), tipo: m.tipo || 'Compartido', pago: m.pago || S.user,
+      tarjeta: m.tarjeta || '', personalDe: m.personalDe || (isEdit ? m.pago : S.user) || S.user,
       texto: m.texto || '', origen: m.origen || 'manual', isEdit: !!isEdit };
     S.sugg = { rubro: m.rubro, subrubro: m.subrubro };
     $('#sheetTitle').textContent = isEdit ? 'Editar gasto' : (m.texto ? 'Confirmar gasto' : 'Nuevo gasto');
@@ -236,8 +290,8 @@
     if (cuotasOpts.indexOf(ed.cuotas) < 0) cuotasOpts.push(ed.cuotas);
     opts($('#fCuotas'), cuotasOpts, ed.cuotas);
     $('#cuotasBox').classList.toggle('hidden', ed.medio !== 'Tarjeta de crédito');
-    opts($('#fPago'), S.users, ed.pago, v => v === S.users[1] ? 'u2' : '');
-    $('#fTipo').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === ed.tipo));
+    if (ed.tarjeta && !cardByName(ed.tarjeta)) S.boot && (S.boot.tarjetas = tarjetas().concat([{ nombre: ed.tarjeta, titular: ed.pago, medio: ed.medio }]));
+    renderTarjetas(); renderPago(); renderTipo();
     $('#fFecha').value = (m.fechaHora || localISO(new Date())).slice(0, 16);
     $('#anularBtn').classList.toggle('hidden', !isEdit);
     updConv();
@@ -255,7 +309,8 @@
     const mov = {
       id: ed.id || uid(), fechaHora: $('#fFecha').value, monto, moneda: ed.moneda, cotizacion: ed.moneda === 'USD' ? parseNum($('#fCot').value) || null : null,
       descripcion: $('#fDesc').value.trim() || subrubro, rubro, subrubro, medio: ed.medio,
-      cuotas: ed.medio === 'Tarjeta de crédito' ? +ed.cuotas : 1, tipo: ed.tipo, pago: ed.pago, texto: ed.texto, origen: ed.origen
+      cuotas: ed.medio === 'Tarjeta de crédito' ? +ed.cuotas : 1, tipo: ed.tipo, pago: ed.pago, texto: ed.texto, origen: ed.origen,
+      tarjeta: esTarjetaMedio(ed.medio) ? ed.tarjeta : '', personalDe: ed.tipo === 'Personal' ? ed.personalDe : ''
     };
     // Aprendizaje: si corrigieron la clasificación sugerida
     if (!S.sugg || S.sugg.rubro !== rubro || (S.sugg.subrubro || '') !== subrubro) {
@@ -266,6 +321,7 @@
       }
     }
     LS.set('lastMedio_' + S.user, mov.medio);
+    if (mov.tarjeta) LS.set('lastTarjeta_' + S.user + '_' + mov.medio, mov.tarjeta);
     $('#saveBtn').disabled = true;
     try {
       if (ed.isEdit) { await api('editar', { mov }); toast('Cambios guardados ✓'); }
@@ -289,10 +345,11 @@
   function rowHTML(m, extra) {
     const u2 = m.pago === S.users[1] ? 'u2' : '';
     const usd = m.moneda === 'USD';
-    const det = [m.subrubro, m.medio, m.cuotas > 1 ? m.cuotas + ' cuotas' : '', m.pago].filter(Boolean).join(' · ');
+    const det = [m.subrubro, m.tarjeta || m.medio, m.cuotas > 1 ? m.cuotas + ' cuotas' : '', 'pagó ' + m.pago].filter(Boolean).join(' · ');
+    const pTag = m.tipo === 'Personal' ? `<span class="tag p">Personal${m.personalDe ? ' ' + esc(m.personalDe) : ''}</span>` : '';
     return `<div class="row" data-id="${esc(m.id)}">
       <div class="ic">${ICON[m.rubro] || '📦'}<i class="${u2}"></i></div>
-      <div class="tx"><b>${esc(m.descripcion)}${m.tipo === 'Personal' ? '<span class="tag p">Personal</span>' : ''}${m.pendiente ? '<span class="tag">pendiente</span>' : ''}${extra || ''}</b><small>${esc(det)}</small></div>
+      <div class="tx"><b>${esc(m.descripcion)}${pTag}${m.pendiente ? '<span class="tag">pendiente</span>' : ''}${extra || ''}</b><small>${esc(det)}</small></div>
       <div class="am num">${usd ? fmtUSD(m.monto) + '<small>≈ ' + fmtARS(m.montoARS) + '</small>' : fmtARS(m.monto)}</div></div>`;
   }
   function bindRows(container, list) {
@@ -326,7 +383,7 @@
   function pass(m) {
     if (S.f.who !== 'all' && m.pago !== S.f.who) return false;
     if (S.f.tipo !== 'all' && m.tipo !== S.f.tipo) return false;
-    if (S.f.q && P.normKey([m.descripcion, m.rubro, m.subrubro, m.medio, m.texto].join(' ')).indexOf(S.f.q) < 0) return false;
+    if (S.f.q && P.normKey([m.descripcion, m.rubro, m.subrubro, m.medio, m.tarjeta, m.texto].join(' ')).indexOf(S.f.q) < 0) return false;
     return true;
   }
   function renderMovs() {
@@ -350,7 +407,7 @@
     if (cuotas.length) {
       const ct = cuotas.reduce((a, x) => a + x.montoARS, 0);
       html += `<div class="daygroup"><span>Cuotas de compras anteriores</span><span class="num">${fmtARS(ct)}</span></div>`;
-      html += cuotas.map(x => rowHTML({ id: '', descripcion: x.descripcion, rubro: x.rubro, subrubro: x.subrubro, medio: 'Cuota ' + x.cuota,
+      html += cuotas.map(x => rowHTML({ id: '', descripcion: x.descripcion, rubro: x.rubro, subrubro: x.subrubro, medio: 'Cuota ' + x.cuota, tarjeta: x.tarjeta ? x.tarjeta + ' · cuota ' + x.cuota : '', personalDe: x.personalDe,
         pago: x.pago, tipo: x.tipo, moneda: x.moneda, monto: x.montoOrig, montoARS: x.montoARS, cuotas: 1 })).join('');
     }
     $('#movList').innerHTML = html || '<div class="empty">Sin movimientos para este filtro</div>';
@@ -373,6 +430,9 @@
     else h += `<div class="big">Están parejos 👌</div>`;
     h += `<div class="sub">Gasto compartido del mes: ${fmtARS(c.totalCompartido)}</div><div class="split">` +
       U.map(u => `<div>${esc(u)} pagó<b class="num">${fmtARS(c.pagado[u])}</b>le tocaba ${fmtARS(c.corresponde[u])}</div>`).join('') + '</div>';
+    U.forEach((u, i) => {
+      if (c.cruzado && c.cruzado[u] > 0) h += `<div class="cross">+ ${fmtARS(c.cruzado[u])} de gastos personales de ${esc(u)} que pagó ${esc(U[1 - i])}</div>`;
+    });
     if (d.cierre) {
       h += `<div class="closed">✓ Compensado: ${esc(d.cierre.deudor || '—')} → ${esc(d.cierre.acreedor || '—')} ${fmtARS(d.cierre.monto)} · registrado por ${esc(d.cierre.registradoPor)} el ${esc(d.cierre.fecha)}` +
         (d.cierre.cambio ? '<br>⚠️ Hubo cambios después del cierre.' : '') + '</div>';
@@ -390,10 +450,17 @@
 
     // Por persona
     const maxU = Math.max(1, ...d.porUsuario.map(u => u.totalARS));
-    h += `<div class="card users2"><h3>Por persona</h3>` + d.porUsuario.map((u, i) => `<div>
+    h += `<div class="card users2"><h3>Cuánto pagó cada uno</h3>` + d.porUsuario.map((u, i) => `<div>
       <div class="h"><b>${esc(u.nombre)}</b><b class="num">${fmtARS(u.totalARS)}</b></div>
       <div class="bar"><i style="width:${u.totalARS / maxU * 100}%;background:var(--${i ? 'u2' : 'u1'})"></i></div>
-      <small style="color:var(--ink-2)">Compartido ${fmtARS(u.compartidoARS)} · Personal ${fmtARS(u.personalARS)}${u.usdNominal ? ' · ' + fmtUSD(u.usdNominal) : ''}</small></div>`).join('') + '</div>';
+      <small style="color:var(--ink-2)">Pagó compartido ${fmtARS(u.compartidoARS)} · Gastos personales propios ${fmtARS(u.personalARS)}${u.usdNominal ? ' · ' + fmtUSD(u.usdNominal) : ''}</small></div>`).join('') + '</div>';
+
+    // Por tarjeta (para controlar el resumen)
+    if (d.porTarjeta && d.porTarjeta.length) {
+      h += `<div class="card"><h3>Por tarjeta <span style="text-transform:none;letter-spacing:0;font-weight:400">· incluye cuotas del mes</span></h3>` +
+        d.porTarjeta.map(t => `<div class="subs" style="display:flex;justify-content:space-between;padding:6px 0;color:var(--ink)"><span>${esc(t.tarjeta)} <small style="color:var(--ink-3)">(${t.cantidad})</small></span>
+          <span class="num" style="text-align:right"><b>${fmtARS(t.arsNominal)}</b>${t.usdNominal ? `<br><small>+ ${fmtUSD(t.usdNominal)}</small>` : ''}</span></div>`).join('') + '</div>';
+    }
 
     // Por rubro
     const key = S.rubroFiltro;

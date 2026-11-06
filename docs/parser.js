@@ -60,6 +60,20 @@
     'salio','salieron','cuesta','costo','total','aprox','aproximadamente','mas','o','sea','eh','este','esta','hoy','unos']);
   const CUOTA_WORD = { un:1, una:1, dos:2, tres:3, cuatro:4, cinco:5, seis:6, siete:7, ocho:8, nueve:9, diez:10, once:11, doce:12, dieciocho:18, veinticuatro:24 };
 
+  // ---------- Tarjetas y titular ----------
+  const CARD_WORD_RE = /\b(?:tarjeta|visa|master ?card|master|amex|american express|naranja|cabal|debito|credito|plastico|adicional|extension)\b/g;
+  const MI_CARD_RE = /\b(?:con |en |por )?mi (?=(?:tarjeta|visa|master|amex|naranja|cabal|debito|credito|plastico|adicional)\b)/;
+  const MEDIO_CRED = 'Tarjeta de crédito', MEDIO_DEB = 'Débito';
+  const escRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  function normTarjetas(list) {
+    return (list || []).map(t => {
+      const tipo = norm(t.medio || t.tipo || '');
+      const claves = String(t.claves || t.palabras || '').split(/[,;]/).map(normKey).filter(Boolean);
+      return { nombre: String(t.nombre || t.tarjeta || ''), titular: String(t.titular || ''), medio: /deb/.test(tipo) ? MEDIO_DEB : MEDIO_CRED, claves };
+    }).filter(t => t.nombre);
+  }
+  const firstKey = u => normKey(u).split(' ')[0];
+
   // ---------- Montos ----------
   function parseNumericToken(raw) {
     let t = raw;
@@ -132,7 +146,7 @@
     const spans = []; // [start,end) a quitar de la descripción
     const res = {
       texto: original, monto: null, moneda: 'ARS', medio: null, cuotas: 1,
-      tipo: 'Compartido', diasAtras: 0, descripcion: '', rubro: 'Varios', subrubro: 'Sin clasificar', regla: null
+      tipo: 'Compartido', personalDe: null, tarjeta: null, titular: null, diasAtras: 0, descripcion: '', rubro: 'Varios', subrubro: 'Sin clasificar', regla: null
     };
     let m;
 
@@ -170,6 +184,52 @@
       const mm = n.match(/\b(?:compartido|entre los dos)\b/);
       if (mm) spans.push([mm.index, mm.index + mm[0].length]);
     }
+
+    // personal de X
+    const users = (opts.users || []).filter(Boolean);
+    for (const u of users) {
+      const k = firstKey(u); if (!k) continue;
+      const mm = new RegExp('\\b(?:gasto )?personal (?:de|para) ' + escRe(k) + '\\b').exec(n);
+      if (mm) { res.tipo = 'Personal'; res.personalDe = u; spans.push([mm.index, mm.index + mm[0].length]); }
+    }
+
+    // titular: "visa de Daniel", "débito de Vero", "a nombre de Daniel", "mi tarjeta"
+    let titular = null;
+    const cardEnds = []; CARD_WORD_RE.lastIndex = 0;
+    while ((m = CARD_WORD_RE.exec(n))) cardEnds.push(m.index + m[0].length);
+    for (const u of users) {
+      const k = firstKey(u); if (!k || titular) continue;
+      const re = new RegExp('\\b(?:a nombre )?de ' + escRe(k) + '\\b', 'g');
+      while ((m = re.exec(n))) {
+        if (inSpans(m.index, m.index + m[0].length)) continue;
+        if (cardEnds.some(e => e <= m.index && m.index - e <= 25)) { titular = u; spans.push([m.index, m.index + m[0].length]); break; }
+      }
+    }
+    if (!titular && opts.me && (m = MI_CARD_RE.exec(n))) { titular = opts.me; spans.push([m.index, m.index + m[0].length]); }
+
+    // tarjeta concreta (hoja Tarjetas)
+    const cards = normTarjetas(opts.tarjetas);
+    if (cards.length) {
+      const esTarjeta = res.medio === MEDIO_CRED || res.medio === MEDIO_DEB;
+      let cand = res.medio && !esTarjeta ? [] : cards.filter(c => !res.medio || c.medio === res.medio);
+      if (titular) cand = cand.filter(c => normKey(c.titular) === normKey(titular));
+      const hits = {};
+      const conClave = cand.filter(c => c.claves.some(kw => {
+        const mm = new RegExp('(?:^|[^a-z0-9])(' + escRe(kw) + ')(?=$|[^a-z0-9])').exec(n);
+        if (!mm) return false;
+        const st = mm.index + mm[0].length - mm[1].length;
+        (hits[c.nombre] = hits[c.nombre] || []).push([st, st + mm[1].length]);
+        return true;
+      }));
+      if (conClave.length) cand = conClave;
+      if (cand.length === 1 && (conClave.length || titular || esTarjeta)) {
+        const c = cand[0];
+        res.tarjeta = c.nombre; res.titular = c.titular;
+        if (!res.medio) res.medio = c.medio;
+        (hits[c.nombre] || []).forEach(sp => spans.push(sp));
+      }
+    }
+    if (!res.titular && titular) res.titular = titular;
 
     // fecha relativa
     FECHA_RE.lastIndex = 0;
@@ -293,7 +353,7 @@
     'Educación','Hijos','Mascotas','Ropa','Ocio / salidas','Hogar / mantenimiento','Regalos','Varios'];
   const MEDIOS_LISTA = ['Efectivo','Débito','Tarjeta de crédito','Transferencia / MP'];
 
-  const API = { parse, classify, compileRules, learnKey, norm, normKey, wordsToNumber, DEFAULT_RULES, RUBROS, MEDIOS: MEDIOS_LISTA, SEED };
+  const API = { parse, normTarjetas, classify, compileRules, learnKey, norm, normKey, wordsToNumber, DEFAULT_RULES, RUBROS, MEDIOS: MEDIOS_LISTA, SEED };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   global.GastosParser = API;
 })(typeof window !== 'undefined' ? window : this);

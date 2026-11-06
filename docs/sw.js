@@ -1,5 +1,5 @@
 /* Service worker: la app abre sin conexión; se actualiza sola en segundo plano */
-const CACHE = 'gastos-casa-v1';
+const CACHE = 'gastos-casa-v2';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'parser.js', 'config.js', 'manifest.json', 'icons/icon-192.png', 'icons/icon-512.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => {

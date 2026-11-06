@@ -151,6 +151,9 @@ main { max-width: 640px; margin: 0 auto; padding: 0 16px; }
 .opts button { border: 1px solid var(--line); background: var(--bg); border-radius: 10px; padding: 9px 12px; cursor: pointer; font-size: 14px; }
 .opts button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
 .opts.u button.on.u2 { background: var(--u2); border-color: var(--u2); color: #fff; }
+.lblhint { text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--ink-3); }
+.opts button small { display: block; font-size: 11px; opacity: .75; font-weight: 400; }
+.cross { margin-top: 10px; font-size: 13px; padding: 8px 10px; border-radius: 10px; background: rgba(127,127,127,.15); }
 .conv { font-size: 13px; color: var(--ink-2); margin-top: 6px; }
 .actions { display: flex; gap: 8px; margin-top: 16px; }
 .actions .btn { flex: 1; }
